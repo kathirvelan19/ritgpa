@@ -12,9 +12,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 @Configuration
 public class FirebaseConfig {
@@ -25,6 +26,9 @@ public class FirebaseConfig {
 
     @Value("${firebase.credentials-path:}")
     private String credentialsPath;
+
+    @Value("${firebase.service-account-json:}")
+    private String serviceAccountJson;
 
     private boolean initialized = false;
 
@@ -39,7 +43,13 @@ public class FirebaseConfig {
             FirebaseOptions.Builder builder = FirebaseOptions.builder()
                     .setProjectId(projectId);
 
-            if (credentialsPath != null && !credentialsPath.trim().isEmpty()) {
+            if (serviceAccountJson != null && !serviceAccountJson.trim().isEmpty()) {
+                // Initialize via raw JSON environment variable (for Render / Docker / Cloud environments)
+                try (ByteArrayInputStream bais = new ByteArrayInputStream(serviceAccountJson.trim().getBytes(StandardCharsets.UTF_8))) {
+                    builder.setCredentials(GoogleCredentials.fromStream(bais));
+                    log.info("Initialized Firebase Admin SDK using FIREBASE_SERVICE_ACCOUNT_JSON environment variable.");
+                }
+            } else if (credentialsPath != null && !credentialsPath.trim().isEmpty()) {
                 File credFile = new File(credentialsPath.trim());
                 if (credFile.exists()) {
                     try (FileInputStream fis = new FileInputStream(credFile)) {
@@ -84,4 +94,3 @@ public class FirebaseConfig {
         return null;
     }
 }
-

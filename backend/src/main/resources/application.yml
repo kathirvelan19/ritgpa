@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 spring:
   application:
@@ -13,7 +13,13 @@ rit:
   gpa:
     template-path: templates/rit-result-template.json
 
+cors:
+  # Accepts comma-separated list of origins or patterns (e.g. https://*.vercel.app,https://ritgpa.vercel.app)
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,https://*.vercel.app}
+
 firebase:
-  project-id: ritgpacalc
-  # In production or with service account, set GOOGLE_APPLICATION_CREDENTIALS or path below
+  project-id: ${FIREBASE_PROJECT_ID:ritgpacalc}
+  # Path to local credentials JSON file (e.g., service-account.json)
   credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
+  # Raw service account JSON string passed as environment variable (common in Render / Cloud deployments)
+  service-account-json: ${FIREBASE_SERVICE_ACCOUNT_JSON:}

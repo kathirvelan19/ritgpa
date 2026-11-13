@@ -8,7 +8,10 @@ import type {
   SemesterRecord,
 } from '../types';
 
-const API_BASE = '/api';
+const envBase = (import.meta.env.VITE_API_BASE_URL || '').trim();
+const API_BASE = envBase
+  ? (envBase.endsWith('/api') ? envBase : `${envBase.replace(/\/+$/, '')}/api`)
+  : '/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE,
