@@ -1,0 +1,101 @@
+{
+  "templateId": "rit-standard-result-v1",
+  "name": "Rajalakshmi Institute of Technology Semester Result Template",
+  "version": "1.0",
+  "document": {
+    "headerKeywords": [
+      "Rajalakshmi Institute of Technology",
+      "Semester Results"
+    ],
+    "pageWidth": 595.28,
+    "pageHeight": 841.89
+  },
+  "studentInfo": {
+    "anchors": {
+      "studentName": {
+        "label": "Student Name :",
+        "endAnchor": "Academic Year :",
+        "pattern": "Student Name\\s*:\\s*(.*?)(?:Academic Year\\s*:|$)"
+      },
+      "academicYear": {
+        "label": "Academic Year :",
+        "pattern": "Academic Year\\s*:\\s*([0-9]{4}-[0-9]{4})"
+      },
+      "registerNo": {
+        "label": "Register No :",
+        "endAnchor": "Semester :",
+        "pattern": "Register No\\s*:\\s*([0-9]+)"
+      },
+      "semester": {
+        "label": "Semester :",
+        "pattern": "Semester\\s*:\\s*([0-9]{1,2})"
+      },
+      "course": {
+        "label": "Course :",
+        "pattern": "Course\\s*:\\s*(.+)"
+      }
+    }
+  },
+  "subjectTable": {
+    "startMarker": "Subject Title",
+    "endMarker": "",
+    "columns": [
+      {
+        "id": "subjectSemester",
+        "name": "Subject Semester",
+        "minX": 30.0,
+        "maxX": 122.0,
+        "required": false
+      },
+      {
+        "id": "subjectCode",
+        "name": "Subject Code",
+        "minX": 122.0,
+        "maxX": 196.5,
+        "required": true,
+        "validationRegex": "^[A-Z]{2}[0-9A-Z]{3,6}$"
+      },
+      {
+        "id": "subjectTitle",
+        "name": "Subject Title",
+        "minX": 196.5,
+        "maxX": 409.1,
+        "required": true,
+        "multiline": true
+      },
+      {
+        "id": "grade",
+        "name": "Grade",
+        "minX": 409.1,
+        "maxX": 454.5,
+        "required": true,
+        "allowedValues": ["O", "A+", "A", "B+", "B", "C", "U"]
+      },
+      {
+        "id": "result",
+        "name": "Result",
+        "minX": 454.5,
+        "maxX": 500.0,
+        "required": true,
+        "allowedValues": ["PASS", "RA", "FAIL", "WH", "AB"]
+      },
+      {
+        "id": "examDate",
+        "name": "Exam Date",
+        "minX": 500.0,
+        "maxX": 570.0,
+        "required": false
+      }
+    ]
+  },
+  "gradePoints": {
+    "O": 10.0,
+    "A+": 9.0,
+    "A": 8.0,
+    "B+": 7.0,
+    "B": 6.0,
+    "C": 5.0,
+    "U": 0.0
+  }
+}
+

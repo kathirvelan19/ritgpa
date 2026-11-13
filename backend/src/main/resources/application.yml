@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: rit-gpa-calculator
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+rit:
+  gpa:
+    template-path: templates/rit-result-template.json
+
+firebase:
+  project-id: ritgpacalc
+  # In production or with service account, set GOOGLE_APPLICATION_CREDENTIALS or path below
+  credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
