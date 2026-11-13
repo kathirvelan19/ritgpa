@@ -1,0 +1,13 @@
+target/
+node_modules/
+.git/
+.idea/
+*.iml
+.vscode/
+*.class
+*.log
+.env
+.env.*
+firebase-service-account*.json
+frontend/dist/
+
