@@ -19,18 +19,58 @@ public class PdfCoordinateExtractor extends PDFTextStripper {
 
     @Override
     protected void writeString(String text, List<TextPosition> textPositions) throws IOException {
-        if (textPositions != null && !textPositions.isEmpty() && text != null && !text.trim().isEmpty()) {
-            TextPosition first = textPositions.get(0);
-            TextPosition last = textPositions.get(textPositions.size() - 1);
-            float startX = first.getXDirAdj();
-            float endX = last.getXDirAdj() + last.getWidthDirAdj();
-            float width = Math.max(endX - startX, first.getWidthDirAdj());
-            float y = first.getYDirAdj();
-            float height = first.getHeightDir();
-
-            fragments.add(new TextFragment(text.trim(), startX, y, width, height));
+        if (textPositions == null || textPositions.isEmpty()) {
+            super.writeString(text, textPositions);
+            return;
         }
+
+        // Group text positions into horizontal column segments by detecting inter-column spacing gaps
+        List<TextPosition> currentChunk = new ArrayList<>();
+
+        for (TextPosition tp : textPositions) {
+            if (currentChunk.isEmpty()) {
+                currentChunk.add(tp);
+            } else {
+                TextPosition prev = currentChunk.get(currentChunk.size() - 1);
+                float gap = tp.getXDirAdj() - (prev.getXDirAdj() + prev.getWidthDirAdj());
+                float yDiff = Math.abs(tp.getYDirAdj() - prev.getYDirAdj());
+
+                // If horizontal gap between characters exceeds column gap threshold (12 pt) or y jumps
+                if (gap > 12.0f || yDiff > 3.0f) {
+                    flushChunk(currentChunk);
+                    currentChunk.clear();
+                }
+                currentChunk.add(tp);
+            }
+        }
+
+        if (!currentChunk.isEmpty()) {
+            flushChunk(currentChunk);
+        }
+
         super.writeString(text, textPositions);
+    }
+
+    private void flushChunk(List<TextPosition> chunk) {
+        if (chunk.isEmpty()) return;
+
+        StringBuilder sb = new StringBuilder();
+        for (TextPosition tp : chunk) {
+            sb.append(tp.getUnicode());
+        }
+
+        String str = sb.toString().replace('\u00a0', ' ').trim();
+        if (str.isEmpty()) return;
+
+        TextPosition first = chunk.get(0);
+        TextPosition last = chunk.get(chunk.size() - 1);
+        float startX = first.getXDirAdj();
+        float endX = last.getXDirAdj() + last.getWidthDirAdj();
+        float width = Math.max(endX - startX, first.getWidthDirAdj());
+        float y = first.getYDirAdj();
+        float height = first.getHeightDir();
+
+        fragments.add(new TextFragment(str, startX, y, width, height));
     }
 
     public List<TextFragment> getFragments() {
@@ -38,7 +78,8 @@ public class PdfCoordinateExtractor extends PDFTextStripper {
     }
 
     /**
-     * Groups text fragments into horizontal lines by matching y-coordinates within tolerance.
+     * Groups text fragments into rows based on Y-coordinate proximity within tolerance,
+     * sorting fragments within each row from left to right.
      */
     public List<PdfLine> getLines(float yTolerance) {
         List<TextFragment> sorted = new ArrayList<>(fragments);
@@ -91,7 +132,6 @@ public class PdfCoordinateExtractor extends PDFTextStripper {
         public String getTextInColumn(double minX, double maxX) {
             StringBuilder sb = new StringBuilder();
             for (TextFragment tf : lineFragments) {
-                // If fragment overlaps column range
                 double fragCenterX = tf.getX() + (tf.getWidth() / 2.0);
                 if (fragCenterX >= minX && fragCenterX <= maxX) {
                     if (sb.length() > 0) sb.append(" ");
@@ -102,4 +142,3 @@ public class PdfCoordinateExtractor extends PDFTextStripper {
         }
     }
 }
-

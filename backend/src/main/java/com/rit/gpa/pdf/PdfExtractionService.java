@@ -12,17 +12,18 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
 public class PdfExtractionService {
     private static final Logger log = LoggerFactory.getLogger(PdfExtractionService.class);
+
+    private static final Set<String> ANNOTATION_KEYWORDS = Set.of(
+            "extract", "from here", "from this", "sub code", "sub namee", "which semester", "which year", "grade from", "result from"
+    );
 
     private final RitTemplateManager templateManager;
 
@@ -66,7 +67,7 @@ public class PdfExtractionService {
                 throw new IllegalArgumentException("PDF contains no pages.");
             }
 
-            // Extract plain text to validate document headers
+            // Extract plain text to validate document headers and student details
             PDFTextStripper textStripper = new PDFTextStripper();
             String fullDocumentText = textStripper.getText(document).replace('\u00a0', ' ');
 
@@ -75,7 +76,7 @@ public class PdfExtractionService {
             // Extract student info
             extractStudentDetails(fullDocumentText, template, response);
 
-            // Extract subject table using coordinate extractor
+            // Extract subject table using coordinate-based extractor
             PdfCoordinateExtractor coordinateExtractor = new PdfCoordinateExtractor();
             coordinateExtractor.getText(document); // triggers writeString coordinate tracking
 
@@ -159,7 +160,6 @@ public class PdfExtractionService {
             Matcher m = p.matcher(text);
             if (m.find()) {
                 String line = m.group(1);
-                // Strip following lines if any
                 int newlineIdx = line.indexOf("\n");
                 if (newlineIdx != -1) {
                     line = line.substring(0, newlineIdx);
@@ -184,35 +184,64 @@ public class PdfExtractionService {
         RitTemplateConfig.ColumnDef resultCol = findCol(tableConfig, "result");
         RitTemplateConfig.ColumnDef examDateCol = findCol(tableConfig, "examDate");
 
+        // 1. Dynamic table column detection from header row anchors (y around 275 - 300)
+        double semMinX = semCol != null ? semCol.getMinX() : 30.0;
+        double semMaxX = semCol != null ? semCol.getMaxX() : 115.0;
+        double codeMinX = codeCol != null ? codeCol.getMinX() : 115.0;
+        double codeMaxX = codeCol != null ? codeCol.getMaxX() : 195.0;
+        double titleMinX = titleCol != null ? titleCol.getMinX() : 195.0;
+        double titleMaxX = titleCol != null ? titleCol.getMaxX() : 395.0;
+        double gradeMinX = gradeCol != null ? gradeCol.getMinX() : 395.0;
+        double gradeMaxX = gradeCol != null ? gradeCol.getMaxX() : 440.0;
+        double resultMinX = resultCol != null ? resultCol.getMinX() : 440.0;
+        double resultMaxX = resultCol != null ? resultCol.getMaxX() : 492.0;
+        double examDateMinX = examDateCol != null ? examDateCol.getMinX() : 492.0;
+        double examDateMaxX = examDateCol != null ? examDateCol.getMaxX() : 570.0;
+
+        // Check if header row contains Grade, Result, Exam Date to calibrate boundaries dynamically
+        for (TextFragment tf : fragments) {
+            if (tf.getY() >= 275.0 && tf.getY() <= 300.0) {
+                String headerText = tf.getText().toLowerCase();
+                if (headerText.equals("grade")) {
+                    gradeMinX = tf.getX() - 2.0;
+                    titleMaxX = gradeMinX;
+                } else if (headerText.equals("result")) {
+                    resultMinX = tf.getX() - 2.0;
+                    gradeMaxX = resultMinX;
+                } else if (headerText.startsWith("exam")) {
+                    examDateMinX = tf.getX() - 2.0;
+                    resultMaxX = examDateMinX;
+                }
+            }
+        }
+
         Pattern codePattern = Pattern.compile(codeCol != null && codeCol.getValidationRegex() != null ?
                 codeCol.getValidationRegex() : "^[A-Z]{2}[0-9A-Z]{3,6}$");
 
-        // 1. Locate subject code fragments
+        // 2. Identify all subject codes below header line
         List<TextFragment> codeFragments = new ArrayList<>();
-        double codeMinX = codeCol != null ? codeCol.getMinX() : 120.0;
-        double codeMaxX = codeCol != null ? codeCol.getMaxX() : 200.0;
-
         for (TextFragment tf : fragments) {
-            if (tf.getY() > 260.0 && tf.getX() >= codeMinX && tf.getX() <= codeMaxX) {
-                if (codePattern.matcher(tf.getText()).matches()) {
+            if (tf.getY() > 300.0 && tf.getX() >= codeMinX && tf.getX() <= codeMaxX) {
+                if (codePattern.matcher(tf.getText()).matches() && !isAnnotation(tf.getText())) {
                     codeFragments.add(tf);
                 }
             }
         }
 
-        // Sort by y coordinate top to bottom
-        codeFragments.sort(java.util.Comparator.comparingDouble(TextFragment::getY));
+        // Sort subject codes strictly from top to bottom
+        codeFragments.sort(Comparator.comparingDouble(TextFragment::getY));
 
         List<ExtractedSubjectDto> subjects = new ArrayList<>();
+        Set<String> seenCodes = new HashSet<>();
 
         for (int i = 0; i < codeFragments.size(); i++) {
             TextFragment codeFrag = codeFragments.get(i);
             float y = codeFrag.getY();
 
-            float rowTop = (i > 0) ? (codeFragments.get(i - 1).getY() + y) / 2.0f : 290.0f;
-            float rowBottom = (i < codeFragments.size() - 1) ? (y + codeFragments.get(i + 1).getY()) / 2.0f : 750.0f;
+            // Compute vertical row bounding box
+            float rowTop = (i > 0) ? (codeFragments.get(i - 1).getY() + y) / 2.0f : Math.max(302.0f, y - 18.0f);
+            float rowBottom = (i < codeFragments.size() - 1) ? (y + codeFragments.get(i + 1).getY()) / 2.0f : y + 22.0f;
 
-            // Collect column fragments inside [rowTop, rowBottom]
             List<TextFragment> titleFrags = new ArrayList<>();
             List<TextFragment> gradeFrags = new ArrayList<>();
             List<TextFragment> resFrags = new ArrayList<>();
@@ -221,30 +250,44 @@ public class PdfExtractionService {
 
             for (TextFragment tf : fragments) {
                 if (tf.getY() >= rowTop && tf.getY() < rowBottom) {
+                    if (isAnnotation(tf.getText())) {
+                        continue;
+                    }
+
                     float cx = tf.getX() + (tf.getWidth() / 2.0f);
 
-                    if (titleCol != null && cx >= titleCol.getMinX() && cx <= titleCol.getMaxX()) {
+                    if (cx >= titleMinX && cx < titleMaxX) {
                         titleFrags.add(tf);
-                    } else if (gradeCol != null && cx >= gradeCol.getMinX() && cx <= gradeCol.getMaxX()) {
+                    } else if (cx >= gradeMinX && cx < gradeMaxX) {
                         gradeFrags.add(tf);
-                    } else if (resultCol != null && cx >= resultCol.getMinX() && cx <= resultCol.getMaxX()) {
+                    } else if (cx >= resultMinX && cx < resultMaxX) {
                         resFrags.add(tf);
-                    } else if (semCol != null && cx >= semCol.getMinX() && cx <= semCol.getMaxX()) {
+                    } else if (cx >= semMinX && cx < semMaxX) {
                         semFrags.add(tf);
-                    } else if (examDateCol != null && cx >= examDateCol.getMinX() && cx <= examDateCol.getMaxX()) {
+                    } else if (cx >= examDateMinX && cx <= examDateMaxX) {
                         examDateFrags.add(tf);
                     }
                 }
             }
 
-            // Sort title and date fragments by Y then X
-            titleFrags.sort(java.util.Comparator.comparingDouble(TextFragment::getY).thenComparingDouble(TextFragment::getX));
-            examDateFrags.sort(java.util.Comparator.comparingDouble(TextFragment::getY).thenComparingDouble(TextFragment::getX));
-
+            // Combine multi-line subject title (sorting top to bottom, then left to right)
+            titleFrags.sort(Comparator.comparingDouble(TextFragment::getY).thenComparingDouble(TextFragment::getX));
             String title = joinFragments(titleFrags);
+
+            // Grade fragments
+            gradeFrags.sort(Comparator.comparingDouble(TextFragment::getY).thenComparingDouble(TextFragment::getX));
             String grade = joinFragments(gradeFrags);
+
+            // Result status
+            resFrags.sort(Comparator.comparingDouble(TextFragment::getY).thenComparingDouble(TextFragment::getX));
             String result = joinFragments(resFrags);
+
+            // Semester
+            semFrags.sort(Comparator.comparingDouble(TextFragment::getY).thenComparingDouble(TextFragment::getX));
             String sem = joinFragments(semFrags);
+
+            // Exam Date
+            examDateFrags.sort(Comparator.comparingDouble(TextFragment::getY).thenComparingDouble(TextFragment::getX));
             String examDate = joinFragments(examDateFrags);
 
             ExtractedSubjectDto subject = new ExtractedSubjectDto();
@@ -254,6 +297,16 @@ public class PdfExtractionService {
             subject.setResultStatus(result);
             subject.setSubjectSemester(!sem.isEmpty() ? sem : response.getSemester());
             subject.setExamDate(examDate);
+
+            // Duplicate code detection
+            if (seenCodes.contains(subject.getSubjectCode())) {
+                subject.setUncertain(true);
+                String dupMsg = "Duplicate subject code detected: " + subject.getSubjectCode();
+                subject.setWarningMessage(dupMsg);
+                response.getWarnings().add(dupMsg);
+            } else {
+                seenCodes.add(subject.getSubjectCode());
+            }
 
             validateSubject(subject, gradeCol, response);
             subjects.add(subject);
@@ -266,16 +319,42 @@ public class PdfExtractionService {
         }
     }
 
+    private boolean isAnnotation(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return false;
+        }
+        String lower = text.toLowerCase().trim();
+        for (String kw : ANNOTATION_KEYWORDS) {
+            if (lower.contains(kw)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private String joinFragments(List<TextFragment> list) {
         StringBuilder sb = new StringBuilder();
         for (TextFragment tf : list) {
+            if (isAnnotation(tf.getText())) {
+                continue;
+            }
             if (sb.length() > 0) sb.append(" ");
             sb.append(tf.getText());
         }
-        return sb.toString().trim();
+        return sb.toString().replaceAll("\\s+", " ").trim();
     }
 
     private void validateSubject(ExtractedSubjectDto subject, RitTemplateConfig.ColumnDef gradeCol, ExtractedResultResponse response) {
+        if (subject.getSubjectCode() == null || subject.getSubjectCode().trim().isEmpty()) {
+            subject.setUncertain(true);
+            response.getWarnings().add("Encountered subject record with missing code.");
+        }
+
+        if (subject.getSubjectName() == null || subject.getSubjectName().trim().isEmpty()) {
+            subject.setUncertain(true);
+            response.getWarnings().add("Subject " + subject.getSubjectCode() + " has empty title.");
+        }
+
         if (gradeCol != null && gradeCol.getAllowedValues() != null && !gradeCol.getAllowedValues().isEmpty()) {
             if (!gradeCol.getAllowedValues().contains(subject.getGrade())) {
                 subject.setUncertain(true);

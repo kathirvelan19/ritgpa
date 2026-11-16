@@ -44,45 +44,45 @@
         "id": "subjectSemester",
         "name": "Subject Semester",
         "minX": 30.0,
-        "maxX": 122.0,
+        "maxX": 115.0,
         "required": false
       },
       {
         "id": "subjectCode",
         "name": "Subject Code",
-        "minX": 122.0,
-        "maxX": 196.5,
+        "minX": 115.0,
+        "maxX": 195.0,
         "required": true,
         "validationRegex": "^[A-Z]{2}[0-9A-Z]{3,6}$"
       },
       {
         "id": "subjectTitle",
         "name": "Subject Title",
-        "minX": 196.5,
-        "maxX": 409.1,
+        "minX": 195.0,
+        "maxX": 395.0,
         "required": true,
         "multiline": true
       },
       {
         "id": "grade",
         "name": "Grade",
-        "minX": 409.1,
-        "maxX": 454.5,
+        "minX": 395.0,
+        "maxX": 440.0,
         "required": true,
-        "allowedValues": ["O", "A+", "A", "B+", "B", "C", "U"]
+        "allowedValues": ["O", "A+", "A", "B+", "B", "C", "U", "RA", "SA", "W"]
       },
       {
         "id": "result",
         "name": "Result",
-        "minX": 454.5,
-        "maxX": 500.0,
+        "minX": 440.0,
+        "maxX": 492.0,
         "required": true,
         "allowedValues": ["PASS", "RA", "FAIL", "WH", "AB"]
       },
       {
         "id": "examDate",
         "name": "Exam Date",
-        "minX": 500.0,
+        "minX": 492.0,
         "maxX": 570.0,
         "required": false
       }
@@ -98,4 +98,3 @@
     "U": 0.0
   }
 }
-
